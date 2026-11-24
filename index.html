@@ -95,7 +95,11 @@ button { font-family: inherit; touch-action: manipulation; }
 }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
 .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line); background: var(--surface); }
-.sw.pass { background: var(--good); border-color: var(--good); }
+.s0{--mix:12%}.s1{--mix:22%}.s2{--mix:32%}.s3{--mix:41%}.s4{--mix:51%}.s5{--mix:61%}.s6{--mix:71%}.s7{--mix:80%}.s8{--mix:90%}.s9{--mix:100%}
+.sw.m { background: color-mix(in srgb, var(--good) var(--mix, 12%), var(--surface)); border-color: var(--good); }
+.scale { display: inline-flex; align-items: center; gap: 3px; }
+.scale .sw { margin-right: 0; }
+.scale small { font-size: 12px; margin: 0 3px; }
 .sw.last { border: 2px solid var(--accent); }
 .how { font-size: 14px; color: var(--muted); }
 .how summary { cursor: pointer; padding: 4px 0; font-weight: 700; color: var(--ink); }
@@ -129,8 +133,10 @@ button { font-family: inherit; touch-action: manipulation; }
 .lv:active { transform: scale(.95); }
 .lv:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (hover: hover) { .lv:hover { border-color: var(--accent); } }
-.lv.pass { background: var(--good); border-color: var(--good); color: var(--on-good); }
-.lv.pass::after { content: "✓"; position: absolute; top: 3px; right: 6px; font-family: var(--font-body); font-size: 12px; font-weight: 700; }
+.lv.pass { border-color: var(--good); color: var(--ink); background: color-mix(in srgb, var(--good) var(--mix, 12%), var(--surface)); }
+.lv.pass.s8, .lv.pass.s9 { color: var(--on-good); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lv.pass.s6, :root:not([data-theme="light"]) .lv.pass.s7 { color: var(--on-good); } }
+:root[data-theme="dark"] .lv.pass.s6, :root[data-theme="dark"] .lv.pass.s7 { color: var(--on-good); }
 .lv.last { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- Game ---------- */
@@ -288,7 +294,7 @@ button { font-family: inherit; touch-action: manipulation; }
     <p class="sub">200 關，每關 100 字，共 2 萬字，依常見程度由易到難。</p>
     <div class="bar" role="progressbar" aria-label="過關進度" aria-valuemin="0" aria-valuemax="200" id="selBar"><i id="selFill"></i></div>
     <button class="go" id="continueBtn" type="button">開始</button>
-    <div class="legend"><span><i class="sw pass"></i>已過關</span><span><i class="sw"></i>未過關</span><span><i class="sw last"></i>上次玩的關卡</span></div>
+    <div class="legend"><span><i class="sw"></i>未過關</span><span class="scale" title="95% 以上最深，每 5% 一階，低於 55% 最淺">過關正確率<small>低</small><i class="sw m s0"></i><i class="sw m s1"></i><i class="sw m s2"></i><i class="sw m s3"></i><i class="sw m s4"></i><i class="sw m s5"></i><i class="sw m s6"></i><i class="sw m s7"></i><i class="sw m s8"></i><i class="sw m s9"></i><small>高</small></span><span><i class="sw last"></i>上次玩的關卡</span></div>
     <details class="how">
       <summary>玩法</summary>
       <ul>
@@ -20401,14 +20407,17 @@ button { font-family: inherit; touch-action: manipulation; }
     return 0;
   }
 
+  function step(a) { a = a || 0; return a >= 95 ? 9 : Math.max(0, Math.floor((a - 50) / 5)); }
+
   function refreshSelect() {
     var done = 0;
     for (var n = 1; n <= LEVELS; n++) {
-      var p = !!progress.passed[n];
+      var rec = progress.passed[n], p = !!rec;
       if (p) done++;
-      lvEls[n].classList.toggle('pass', p);
-      lvEls[n].classList.toggle('last', progress.last === n);
-      lvEls[n].setAttribute('aria-label', '第 ' + n + ' 關' + (p ? '，已過關' : ''));
+      var el = lvEls[n];
+      el.className = 'lv' + (p ? ' pass s' + step(rec.acc) : '') + (progress.last === n ? ' last' : '');
+      el.setAttribute('aria-label', '第 ' + n + ' 關' + (p ? '，已過關，最佳正確率 ' + (rec.acc || 0) + '%' : ''));
+      el.title = p ? '最佳正確率 ' + (rec.acc || 0) + '%' : '';
     }
     passedCount.textContent = done;
     selFill.style.width = (done / LEVELS * 100) + '%';
@@ -20622,7 +20631,8 @@ button { font-family: inherit; touch-action: manipulation; }
   function finish(win) {
     var rate = Math.round(correct / Math.max(1, answered) * 100);
     if (win) {
-      progress.passed[level] = { acc: rate, at: Date.now() };
+      var prev = progress.passed[level];
+      progress.passed[level] = { acc: Math.max(rate, (prev && prev.acc) || 0), at: Date.now() };
       progress.last = level;
       save();
     }
