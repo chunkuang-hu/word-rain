@@ -101,6 +101,10 @@ button { font-family: inherit; touch-action: manipulation; }
 .scale .sw { margin-right: 0; }
 .scale small { font-size: 12px; margin: 0 3px; }
 .sw.last { border: 2px solid var(--accent); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg button { appearance: none; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; font-size: 15px; padding: 10px 6px; border-radius: 10px; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.seg button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .how { font-size: 14px; color: var(--muted); }
 .how summary { cursor: pointer; padding: 4px 0; font-weight: 700; color: var(--ink); }
 .how ul { margin: 6px 0 4px; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; line-height: 1.5; }
@@ -205,6 +209,7 @@ button { font-family: inherit; touch-action: manipulation; }
   box-shadow: 0 6px 16px var(--shadow);
   will-change: transform;
 }
+.word.zh { font-size: clamp(26px, 8vw, 40px); }
 .word.urgent { border-color: var(--bad); color: var(--bad); }
 .word.hit { background: var(--good); border-color: var(--good); color: var(--on-good); }
 .word.miss { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
@@ -238,11 +243,14 @@ button { font-family: inherit; touch-action: manipulation; }
   font-weight: 700;
   font-size: clamp(15px, 4.3vw, 18px);
   line-height: 1.25;
+  overflow-wrap: anywhere;
+  min-width: 0;
   display: flex; align-items: center; justify-content: center;
   text-align: center;
   cursor: pointer;
   transition: background .12s, border-color .12s, transform .08s;
 }
+.grid.en .cell { font-size: clamp(13px, 3.8vw, 17px); }
 .cell:active { transform: scale(.97); }
 .cell:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (hover: hover) { .cell:hover { border-color: var(--accent); } }
@@ -292,13 +300,20 @@ button { font-family: inherit; touch-action: manipulation; }
       <div class="sel-count">已過關 <b id="passedCount">0</b> / 200</div>
     </div>
     <p class="sub">200 關，每關 100 字，共 2 萬字，依常見程度由易到難。</p>
+    <div class="seg" role="group" aria-label="作答模式" id="seg">
+      <button type="button" data-mode="e2z">英 → 中</button>
+      <button type="button" data-mode="z2e">中 → 英</button>
+      <button type="button" data-mode="mix">混合</button>
+    </div>
+    <p class="sub" id="modeNote"></p>
     <div class="bar" role="progressbar" aria-label="過關進度" aria-valuemin="0" aria-valuemax="200" id="selBar"><i id="selFill"></i></div>
     <button class="go" id="continueBtn" type="button">開始</button>
     <div class="legend"><span><i class="sw"></i>未過關</span><span class="scale" title="95% 以上最深，每 5% 一階，低於 55% 最淺">過關正確率<small>低</small><i class="sw m s0"></i><i class="sw m s1"></i><i class="sw m s2"></i><i class="sw m s3"></i><i class="sw m s4"></i><i class="sw m s5"></i><i class="sw m s6"></i><i class="sw m s7"></i><i class="sw m s8"></i><i class="sw m s9"></i><small>高</small></span><span><i class="sw last"></i>上次玩的關卡</span></div>
     <details class="how">
       <summary>玩法</summary>
       <ul>
-        <li>英文單字會在 10 秒內從上方掉到底，趕快點下方正確的中文意思。</li>
+        <li>單字會在 10 秒內從上方掉到底，趕快在下方點出正確答案。</li>
+        <li>三種模式：英→中（看英文選中文）、中→英（看中文選英文）、混合（每題隨機）。每種模式各自記錄過關進度和正確率。</li>
         <li>答對 +1 分，答錯或超時 −1 分。累積 100 分過關。</li>
         <li>分數低於 0 就失敗，剛好 0 分還可以繼續玩。</li>
         <li>答錯的字稍後會再出現。</li>
@@ -345,21 +360,40 @@ button { font-family: inherit; touch-action: manipulation; }
   'use strict';
 
   var GOAL = 100, DURATION = 10000, RETRY_GAP = 6, PER = 100, LEVELS = 200, GROUP = 10;
-  var KEY = 'wordrain.progress.v1';
+  var KEY = 'wordrain.progress.v1', KEY2 = 'wordrain.progress.v2';
+  var MODE_NAME = { e2z: '英→中', z2e: '中→英', mix: '混合' };
 
   function $(id) { return document.getElementById(id); }
   function fmt(n) { return n.toLocaleString('en-US'); }
 
   /* ---------- progress (per viewer, may be unavailable) ---------- */
-  var progress = { passed: {}, last: 0 };
+  var store = { mode: 'e2z', modes: { e2z: { passed: {}, last: 0 }, z2e: { passed: {}, last: 0 }, mix: { passed: {}, last: 0 } } };
   try {
-    var raw = localStorage.getItem(KEY);
-    if (raw) {
-      var o = JSON.parse(raw);
-      if (o && o.passed) progress = { passed: o.passed, last: o.last || 0 };
+    var raw2 = localStorage.getItem(KEY2);
+    if (raw2) {
+      var o2 = JSON.parse(raw2);
+      if (o2 && o2.modes) {
+        ['e2z', 'z2e', 'mix'].forEach(function (m) {
+          var x = o2.modes[m];
+          if (x && x.passed) store.modes[m] = { passed: x.passed, last: x.last || 0 };
+        });
+        if (MODE_NAME[o2.mode]) store.mode = o2.mode;
+      }
+    } else {
+      var raw1 = localStorage.getItem(KEY);
+      if (raw1) {
+        var o1 = JSON.parse(raw1);
+        if (o1 && o1.passed) store.modes.e2z = { passed: o1.passed, last: o1.last || 0 };
+      }
     }
   } catch (e) {}
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch (e) {} }
+  var mode = store.mode, progress = store.modes[mode];
+  function save() { try { localStorage.setItem(KEY2, JSON.stringify(store)); } catch (e) {} }
+  function setMode(m) {
+    if (!MODE_NAME[m]) return;
+    mode = m; store.mode = m; progress = store.modes[m];
+    save(); updateModeUi(); refreshSelect(); scrollToLast();
+  }
 
   /* ---------- word data ---------- */
   var ALL = [
@@ -20433,6 +20467,14 @@ button { font-family: inherit; touch-action: manipulation; }
 
   continueBtn.addEventListener('click', function () { startLevel(nextUnpassed() || 1); });
 
+  var segBtns = Array.prototype.slice.call(document.querySelectorAll('#seg button'));
+  var MODE_NOTE = { e2z: '看英文，選中文。', z2e: '看中文，選英文。', mix: '每題隨機出英文或中文。' };
+  function updateModeUi() {
+    segBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-mode') === mode ? 'true' : 'false'); });
+    $('modeNote').textContent = MODE_NAME[mode] + '模式：' + MODE_NOTE[mode] + '過關進度只算這個模式。';
+  }
+  segBtns.forEach(function (b) { b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); }); });
+
   function scrollToLast() {
     var t = lvEls[progress.last] || lvEls[nextUnpassed() || 1];
     if (t && t.scrollIntoView) { try { t.scrollIntoView({ block: 'center' }); } catch (e) {} }
@@ -20488,12 +20530,16 @@ button { font-family: inherit; touch-action: manipulation; }
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  function setCell(i, fresh) {
-    cells[i].textContent = board[i].zh;
-    if (fresh) {
+  var dir = 'e2z';
+  function renderCells(fresh) {
+    gridEl.classList.toggle('en', dir === 'z2e');
+    for (var i = 0; i < 9; i++) {
+      cells[i].textContent = dir === 'e2z' ? board[i].zh : board[i].en;
       cells[i].classList.remove('fresh');
-      void cells[i].offsetWidth;
-      cells[i].classList.add('fresh');
+    }
+    if (fresh >= 0) {
+      void cells[fresh].offsetWidth;
+      cells[fresh].classList.add('fresh');
     }
   }
 
@@ -20516,10 +20562,9 @@ button { font-family: inherit; touch-action: manipulation; }
     board = []; deck = shuffle(pool.slice()); retry = []; missed = new Map();
     score = 0; answered = 0; correct = 0; turn = 0; lastIdx = -1; cur = -1; locked = true; running = false;
     for (var i = 0; i < 9; i++) board[i] = draw(-1);
-    for (var k = 0; k < 9; k++) {
-      cells[k].classList.remove('good', 'bad', 'fresh');
-      setCell(k, false);
-    }
+    for (var k = 0; k < 9; k++) cells[k].classList.remove('good', 'bad', 'fresh');
+    dir = mode === 'z2e' ? 'z2e' : 'e2z';
+    renderCells(-1);
     wordEl.hidden = true;
     updateHud();
   }
@@ -20529,12 +20574,14 @@ button { font-family: inherit; touch-action: manipulation; }
     wordEl.style.transform = 'translate(-50%,' + Math.max(0, p * h) + 'px)';
   }
 
-  function nextWord() {
+  function nextWord(fresh) {
     var idx;
     do { idx = Math.floor(Math.random() * 9); } while (idx === lastIdx);
     cur = idx;
-    wordEl.className = 'word';
-    wordEl.textContent = board[cur].en;
+    dir = mode === 'mix' ? (Math.random() < 0.5 ? 'e2z' : 'z2e') : (mode === 'z2e' ? 'z2e' : 'e2z');
+    renderCells(fresh == null ? -1 : fresh);
+    wordEl.className = 'word' + (dir === 'z2e' ? ' zh' : '');
+    wordEl.textContent = dir === 'e2z' ? board[cur].en : board[cur].zh;
     wordEl.hidden = false;
     place(0);
     t0 = performance.now();
@@ -20591,10 +20638,10 @@ button { font-family: inherit; touch-action: manipulation; }
     cells.forEach(function (c) { c.classList.remove('good', 'bad'); });
     wordEl.hidden = true;
     board[cur] = draw(cur);
-    setCell(cur, true);
+    var fi = cur;
     lastIdx = cur;
     turn++;
-    nextWord();
+    nextWord(fi);
   }
 
   /* ---------- overlay ---------- */
@@ -20666,12 +20713,12 @@ button { font-family: inherit; touch-action: manipulation; }
     lvname.textContent = '';
     var b = document.createElement('b'); b.textContent = '第 ' + n + ' 關';
     lvname.appendChild(b);
-    lvname.appendChild(document.createTextNode(levelRange(n)));
+    lvname.appendChild(document.createTextNode(MODE_NAME[mode] + '　' + levelRange(n)));
     reset();
     showOverlay({
       eyebrow: levelRange(n),
       title: '第 ' + n + ' 關',
-      stats: '10 秒內點出正確的中文。答對 +1，答錯或超時 −1，累積 100 分過關，低於 0 分失敗。' + (progress.passed[n] ? '這一關你已經過關了。' : ''),
+      stats: MODE_NAME[mode] + '模式。10 秒內點出正確的答案。答對 +1，答錯或超時 −1，累積 100 分過關，低於 0 分失敗。' + (progress.passed[n] ? '這一關你已經過關了。' : ''),
       actions: [
         { label: '開始', fn: begin },
         { label: '回到選關', fn: leaveGame }
@@ -20706,6 +20753,7 @@ button { font-family: inherit; touch-action: manipulation; }
     else if (hiddenAt) { if (!locked) t0 += performance.now() - hiddenAt; hiddenAt = 0; }
   });
 
+  updateModeUi();
   refreshSelect();
   scrollToLast();
 })();
