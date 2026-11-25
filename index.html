@@ -315,7 +315,7 @@ button { font-family: inherit; touch-action: manipulation; }
         <li>單字會在 10 秒內從上方掉到底，趕快在下方點出正確答案。</li>
         <li>三種模式：英→中（看英文選中文）、中→英（看中文選英文）、混合（每題隨機）。每種模式各自記錄過關進度和正確率。</li>
         <li>答對 +1 分，答錯或超時 −1 分。累積 100 分過關。</li>
-        <li>一開始有 20 分，分數降到 0 就失敗。</li>
+        <li>一開始有 50 分，分數降到 0 就失敗。</li>
         <li>答錯的字稍後會再出現。</li>
       </ul>
     </details>
@@ -329,7 +329,7 @@ button { font-family: inherit; touch-action: manipulation; }
       <div class="lvname" id="lvname"></div>
     </div>
     <header class="hud">
-      <div class="score" id="scoreWrap"><span id="score">20</span><small>/ 100</small></div>
+      <div class="score" id="scoreWrap"><span id="score">50</span><small>/ 100</small></div>
       <div class="meta"><span id="answered">已答 0 題</span><span id="acc">答對率 —</span></div>
       <div class="bar" role="progressbar" aria-label="分數進度" aria-valuemin="0" aria-valuemax="100" id="bar"><i id="barfill"></i></div>
     </header>
@@ -359,7 +359,7 @@ button { font-family: inherit; touch-action: manipulation; }
 (function () {
   'use strict';
 
-  var START = 20, GOAL = 100, DURATION = 10000, RETRY_GAP = 6, PER = 100, LEVELS = 200, GROUP = 10;
+  var START = 50, GOAL = 100, DURATION = 10000, RETRY_GAP = 6, PER = 100, LEVELS = 200, GROUP = 10;
   var KEY = 'wordrain.progress.v1', KEY2 = 'wordrain.progress.v2';
   var MODE_NAME = { e2z: '英→中', z2e: '中→英', mix: '混合' };
 
@@ -20718,7 +20718,7 @@ button { font-family: inherit; touch-action: manipulation; }
     showOverlay({
       eyebrow: levelRange(n),
       title: '第 ' + n + ' 關',
-      stats: MODE_NAME[mode] + '模式。10 秒內點出正確的答案。答對 +1，答錯或超時 −1，一開始 20 分，累積 100 分過關，降到 0 分失敗。' + (progress.passed[n] ? '這一關你已經過關了。' : ''),
+      stats: MODE_NAME[mode] + '模式。10 秒內點出正確的答案。答對 +1，答錯或超時 −1，一開始 50 分，累積 100 分過關，降到 0 分失敗。' + (progress.passed[n] ? '這一關你已經過關了。' : ''),
       actions: [
         { label: '開始', fn: begin },
         { label: '回到選關', fn: leaveGame }
